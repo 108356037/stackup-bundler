@@ -37,6 +37,9 @@ type Values struct {
 	GinMode                string
 	BundlerCollectorTracer string
 	BundlerErrorTracer     string
+
+	// Unsafe mode
+	UnsafeMode bool
 }
 
 func envArrayToAddressSlice(s string) []common.Address {
@@ -65,11 +68,13 @@ func GetValues() *Values {
 	viper.SetDefault("erc4337_bundler_blocks_in_the_future", 25)
 	viper.SetDefault("erc4337_bundler_debug_mode", false)
 	viper.SetDefault("erc4337_bundler_gin_mode", gin.ReleaseMode)
+	viper.SetDefault("erc4337_bundler_unsafe_mode", false)
 
 	// Read in from .env file if available
 	viper.SetConfigName(".env")
 	viper.SetConfigType("env")
 	viper.AddConfigPath(".")
+	viper.AddConfigPath("/env")
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// Config file not found
@@ -94,6 +99,7 @@ func GetValues() *Values {
 	_ = viper.BindEnv("erc4337_bundler_blocks_in_the_future")
 	_ = viper.BindEnv("erc4337_bundler_debug_mode")
 	_ = viper.BindEnv("erc4337_bundler_gin_mode")
+	_ = viper.BindEnv("erc4337_bundler_unsafe_mode")
 
 	// Validate required variables
 	if variableNotSetOrIsNil("erc4337_bundler_eth_client_url") {
@@ -140,6 +146,11 @@ func GetValues() *Values {
 	blocksInTheFuture := viper.GetInt("erc4337_bundler_blocks_in_the_future")
 	debugMode := viper.GetBool("erc4337_bundler_debug_mode")
 	ginMode := viper.GetString("erc4337_bundler_gin_mode")
+	unsafeMode := viper.GetBool("erc4337_bundler_unsafe_mode")
+
+	if unsafeMode {
+		fmt.Println("Warning: unsafe mode enabled, storage slot restriction & staking check is off")
+	}
 	return &Values{
 		PrivateKey:              privateKey,
 		EthClientUrl:            ethClientUrl,
@@ -157,5 +168,6 @@ func GetValues() *Values {
 		GinMode:                 ginMode,
 		BundlerCollectorTracer:  trc.BundlerCollectorTracer,
 		BundlerErrorTracer:      trc.BundlerErrorTracer,
+		UnsafeMode:              unsafeMode,
 	}
 }

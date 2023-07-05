@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/stackup-wallet/stackup-bundler/internal/config"
 	"github.com/stackup-wallet/stackup-bundler/pkg/entrypoint"
 	"github.com/stackup-wallet/stackup-bundler/pkg/entrypoint/methods"
 	"github.com/stackup-wallet/stackup-bundler/pkg/entrypoint/utils"
@@ -65,7 +66,7 @@ func TraceSimulateValidation(
 	ic := mapset.NewSet[common.Address]()
 	for title, entity := range knownEntity {
 		for opcode := range entity.Info.Opcodes {
-			if bannedOpCodes.Contains(opcode) {
+			if bannedOpCodes.Contains(opcode) && !config.GetValues().UnsafeMode {
 				return nil, fmt.Errorf("%s uses banned opcode: %s", title, opcode)
 			}
 		}
@@ -76,16 +77,18 @@ func TraceSimulateValidation(
 	}
 
 	create2Count, ok := knownEntity["factory"].Info.Opcodes[create2OpCode]
-	if ok && (create2Count > 1 || len(op.InitCode) == 0) {
-		return nil, fmt.Errorf("factory with too many %s", create2OpCode)
-	}
-	_, ok = knownEntity["account"].Info.Opcodes[create2OpCode]
-	if ok {
-		return nil, fmt.Errorf("account uses banned opcode: %s", create2OpCode)
-	}
-	_, ok = knownEntity["paymaster"].Info.Opcodes[create2OpCode]
-	if ok {
-		return nil, fmt.Errorf("paymaster uses banned opcode: %s", create2OpCode)
+	if !config.GetValues().UnsafeMode {
+		if ok && (create2Count > 1 || len(op.InitCode) == 0) {
+			return nil, fmt.Errorf("factory with too many %s", create2OpCode)
+		}
+		_, ok = knownEntity["account"].Info.Opcodes[create2OpCode]
+		if ok {
+			return nil, fmt.Errorf("account uses banned opcode: %s", create2OpCode)
+		}
+		_, ok = knownEntity["paymaster"].Info.Opcodes[create2OpCode]
+		if ok {
+			return nil, fmt.Errorf("paymaster uses banned opcode: %s", create2OpCode)
+		}
 	}
 
 	slotsByEntity := newStorageSlotsByEntity(stakes, res.Keccak)
@@ -115,8 +118,10 @@ func TraceSimulateValidation(
 				)
 			}
 
-			if len(out.Context) != 0 && !knownEntity["paymaster"].IsStaked {
-				return nil, errors.New("unstaked paymaster must not return context")
+			if !config.GetValues().UnsafeMode {
+				if len(out.Context) != 0 && !knownEntity["paymaster"].IsStaked {
+					return nil, errors.New("unstaked paymaster must not return context")
+				}
 			}
 		}
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/stackup-wallet/stackup-bundler/internal/config"
 	"github.com/stackup-wallet/stackup-bundler/pkg/tracer"
 	"github.com/stackup-wallet/stackup-bundler/pkg/userop"
 )
@@ -76,34 +77,36 @@ func validateStorageSlotsForEntity(
 			continue
 		}
 
-		var mustStakeSlot string
-		accessTypes := map[string]tracer.Counts{
-			"read":  access.Reads,
-			"write": access.Writes,
-		}
-		for key, slotCount := range accessTypes {
-			for slot := range slotCount {
-				if isAssociatedWith(senderSlots, slot) {
-					if len(op.InitCode) > 0 {
+		if !config.GetValues().UnsafeMode {
+			var mustStakeSlot string
+			accessTypes := map[string]tracer.Counts{
+				"read":  access.Reads,
+				"write": access.Writes,
+			}
+			for key, slotCount := range accessTypes {
+				for slot := range slotCount {
+					if isAssociatedWith(senderSlots, slot) {
+						if len(op.InitCode) > 0 {
+							mustStakeSlot = slot
+						} else {
+							continue
+						}
+					} else if isAssociatedWith(storageSlots, slot) || addr == entityAddr {
 						mustStakeSlot = slot
 					} else {
-						continue
+						return fmt.Errorf("%s has forbidden %s to %s slot %s", entityName, key, addr2KnownEntity(op, addr), slot)
 					}
-				} else if isAssociatedWith(storageSlots, slot) || addr == entityAddr {
-					mustStakeSlot = slot
-				} else {
-					return fmt.Errorf("%s has forbidden %s to %s slot %s", entityName, key, addr2KnownEntity(op, addr), slot)
 				}
 			}
-		}
 
-		if mustStakeSlot != "" && !entityIsStaked {
-			return fmt.Errorf(
-				"unstaked %s accessed %s slot %s",
-				entityName,
-				addr2KnownEntity(op, addr),
-				mustStakeSlot,
-			)
+			if mustStakeSlot != "" && !entityIsStaked {
+				return fmt.Errorf(
+					"unstaked %s accessed %s slot %s",
+					entityName,
+					addr2KnownEntity(op, addr),
+					mustStakeSlot,
+				)
+			}
 		}
 	}
 
